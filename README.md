@@ -17,6 +17,7 @@ A student drops a 3D model into a web page and gets a viewer they can open on th
 | Format | Extension |
 | --- | --- |
 | STL | `.stl` |
+| 3MF | `.3mf` |
 | glTF / GLB | `.gltf`, `.glb` |
 | OBJ | `.obj` |
 
@@ -51,7 +52,7 @@ To use it:
 2. Drag a model onto the page, or tap the drop zone to pick a file (on a phone, choose a file from the device).
 3. Show the Hiro marker to the camera. Use "Preview without marker" to check the model without one.
 
-Known limits: `.gltf` files that reference separate `.bin` or texture files won't load from a single file, so use `.glb`. OBJ files load without their `.mtl` materials.
+Known limits: `.gltf` files that reference separate `.bin` or texture files won't load from a single file, so use `.glb`. OBJ files load without their `.mtl` materials. STL and 3MF models are shown in plain grey: 3MF colours and materials are ignored, and 3MF files that split their model across several files (production extension) are not supported.
 
 ## Roadmap
 

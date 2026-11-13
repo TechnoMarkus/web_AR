@@ -2,7 +2,7 @@
   'use strict';
 
   var THREE = AFRAME.THREE;
-  var SUPPORTED = ['stl', 'glb', 'gltf', 'obj'];
+  var SUPPORTED = ['stl', '3mf', 'glb', 'gltf', 'obj'];
 
   var sceneEl = document.querySelector('a-scene');
   var markerEl = document.getElementById('marker');
@@ -75,6 +75,132 @@
     return geometry;
   }
 
+  // ---- 3MF parsing (zip + XML) ------------------------------------------
+
+  function localName(el) { return el.localName || el.nodeName.replace(/^.*:/, ''); }
+
+  function childrenNamed(parent, name) {
+    var out = [];
+    for (var n = parent.firstElementChild; n; n = n.nextElementSibling) {
+      if (localName(n) === name) out.push(n);
+    }
+    return out;
+  }
+
+  // 3MF stores a row-vector matrix as 12 numbers; convert to a THREE matrix.
+  function parse3MFTransform(str) {
+    var m = new THREE.Matrix4();
+    if (!str) return m;
+    var a = str.trim().split(/\s+/).map(Number);
+    if (a.length !== 12 || a.some(isNaN)) return m;
+    m.set(a[0], a[3], a[6], a[9],
+          a[1], a[4], a[7], a[10],
+          a[2], a[5], a[8], a[11],
+          0, 0, 0, 1);
+    return m;
+  }
+
+  function parse3MF(buffer) {
+    if (typeof JSZip === 'undefined') {
+      return Promise.reject(new Error('The 3MF reader (JSZip) failed to load. Check your connection.'));
+    }
+    var material = new THREE.MeshStandardMaterial({
+      color: 0xcccccc, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide
+    });
+
+    return JSZip.loadAsync(buffer).catch(function () {
+      throw new Error('This is not a valid 3MF file.');
+    }).then(function (zip) {
+      // Find the model part via the package relationships, else the usual path.
+      var modelPath = '3D/3dmodel.model';
+      var relsFile = zip.file('_rels/.rels');
+      var relsPromise = relsFile ? relsFile.async('string') : Promise.resolve('');
+      return relsPromise.then(function (relsText) {
+        if (relsText) {
+          var rels = new DOMParser().parseFromString(relsText, 'application/xml')
+            .getElementsByTagName('Relationship');
+          for (var i = 0; i < rels.length; i++) {
+            if (/3dmodel$/i.test(rels[i].getAttribute('Type') || '')) {
+              modelPath = (rels[i].getAttribute('Target') || modelPath).replace(/^\//, '');
+              break;
+            }
+          }
+        }
+        var modelFile = zip.file(modelPath);
+        if (!modelFile) throw new Error('No 3D model found inside this 3MF file.');
+        return modelFile.async('string');
+      });
+    }).then(function (xmlText) {
+      var doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+      if (doc.getElementsByTagName('parsererror').length) {
+        throw new Error('This 3MF file contains invalid XML.');
+      }
+      var resources = doc.getElementsByTagNameNS('*', 'resources')[0];
+      var build = doc.getElementsByTagNameNS('*', 'build')[0];
+      if (!resources || !build) throw new Error('This 3MF file has no printable model.');
+
+      var objects = {};
+      childrenNamed(resources, 'object').forEach(function (o) {
+        objects[o.getAttribute('id')] = o;
+      });
+
+      function buildObject(id, depth) {
+        var o = objects[id];
+        if (!o || depth > 16) return null;
+        var group = new THREE.Group();
+
+        var meshEl = childrenNamed(o, 'mesh')[0];
+        if (meshEl) {
+          var vertEl = childrenNamed(meshEl, 'vertices')[0];
+          var triEl = childrenNamed(meshEl, 'triangles')[0];
+          if (vertEl && triEl) {
+            var verts = childrenNamed(vertEl, 'vertex').map(function (v) {
+              return [+v.getAttribute('x'), +v.getAttribute('y'), +v.getAttribute('z')];
+            });
+            var tris = childrenNamed(triEl, 'triangle');
+            var positions = new Float32Array(tris.length * 9);
+            for (var t = 0; t < tris.length; t++) {
+              var idx = [+tris[t].getAttribute('v1'), +tris[t].getAttribute('v2'), +tris[t].getAttribute('v3')];
+              for (var k = 0; k < 3; k++) {
+                var p = verts[idx[k]];
+                if (!p) throw new Error('This 3MF file references a missing vertex.');
+                positions.set(p, t * 9 + k * 3);
+              }
+            }
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.computeVertexNormals();
+            group.add(new THREE.Mesh(geometry, material));
+          }
+        }
+
+        var compsEl = childrenNamed(o, 'components')[0];
+        if (compsEl) {
+          childrenNamed(compsEl, 'component').forEach(function (c) {
+            var child = buildObject(c.getAttribute('objectid'), depth + 1);
+            if (child) {
+              child.applyMatrix4(parse3MFTransform(c.getAttribute('transform')));
+              group.add(child);
+            }
+          });
+        }
+        return group;
+      }
+
+      var root = new THREE.Group();
+      childrenNamed(build, 'item').forEach(function (item) {
+        if (item.getAttribute('printable') === '0') return;
+        var obj = buildObject(item.getAttribute('objectid'), 0);
+        if (obj) {
+          obj.applyMatrix4(parse3MFTransform(item.getAttribute('transform')));
+          root.add(obj);
+        }
+      });
+      if (root.children.length === 0) throw new Error('This 3MF file has no printable objects.');
+      return root;
+    });
+  }
+
   // ---- Fit the model to the marker --------------------------------------
 
   function fitModel() {
@@ -125,7 +251,7 @@
   function loadFile(file) {
     var ext = (file.name.split('.').pop() || '').toLowerCase();
     if (SUPPORTED.indexOf(ext) === -1) {
-      setStatus('Unsupported file type ".' + ext + '". Use STL, GLB/GLTF or OBJ.', true);
+      setStatus('Unsupported file type ".' + ext + '". Use STL, 3MF, GLB/GLTF or OBJ.', true);
       return;
     }
 
@@ -142,6 +268,17 @@
         onLoaded(file.name);
       }).catch(function (err) {
         setStatus(err.message || 'Failed to read the STL file.', true);
+      });
+      return;
+    }
+
+    if (ext === '3mf') {
+      file.arrayBuffer().then(parse3MF).then(function (group) {
+        group.rotation.x = -Math.PI / 2; // 3MF is Z-up like STL
+        modelEl.setObject3D('mesh', group);
+        onLoaded(file.name);
+      }).catch(function (err) {
+        setStatus(err.message || 'Failed to read the 3MF file.', true);
       });
       return;
     }
