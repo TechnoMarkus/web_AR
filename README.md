@@ -52,7 +52,7 @@ AR needs a secure origin. To test on a phone, host the site over HTTPS (for exam
 
 AR depends on the device: it needs Chrome on a recent Android phone with Google Play Services for AR, or Safari on an iPhone. It does not work on desktop browsers. If the device can't do it, the page says so.
 
-Known limits: `.gltf` files that reference separate `.bin` or texture files won't load from a single file, so use `.glb`. OBJ files load without their `.mtl` materials. STL and 3MF models are shown in plain grey: 3MF colours and materials are ignored, and 3MF files that split their model across several files (production extension) are not supported.
+Known limits: `.gltf` files that reference separate `.bin` or texture files won't load from a single file, so use `.glb`. OBJ files load without their `.mtl` materials. STL and 3MF models are shown in plain grey: 3MF colours and materials are ignored. 3MF files from slicers that split a model into several parts (Bambu Studio, PrusaSlicer, Orca) are supported.
 
 ## Roadmap
 

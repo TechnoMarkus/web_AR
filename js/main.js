@@ -92,9 +92,52 @@
       color: 0xcccccc, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide
     });
 
+    // Slicers (Bambu Studio, PrusaSlicer, Orca) split a model across several parts and
+    // reference them with p:path (the 3MF production extension). Load every part up front.
+    var PROD_NS = 'http://schemas.microsoft.com/3dmanufacturing/production/2015/06';
+    var zipRef = null;
+    var docs = {}; // part path -> { objects, build }
+
+    function componentPath(c) {
+      var p = c.getAttributeNS(PROD_NS, 'path') || c.getAttribute('p:path') || '';
+      return p.replace(/^\//, '');
+    }
+
+    function loadDoc(path) {
+      path = path.replace(/^\//, '');
+      if (docs[path]) return Promise.resolve(docs[path]);
+      var file = zipRef.file(path);
+      if (!file) return Promise.reject(new Error('This 3MF file refers to a missing part: ' + path));
+      return file.async('string').then(function (xml) {
+        var doc = new DOMParser().parseFromString(xml, 'application/xml');
+        if (doc.getElementsByTagName('parsererror').length) {
+          throw new Error('This 3MF file contains invalid XML.');
+        }
+        var resources = doc.getElementsByTagNameNS('*', 'resources')[0];
+        var objects = {};
+        var refs = [];
+        if (resources) {
+          childrenNamed(resources, 'object').forEach(function (o) {
+            objects[o.getAttribute('id')] = o;
+            var comps = childrenNamed(o, 'components')[0];
+            if (comps) {
+              childrenNamed(comps, 'component').forEach(function (c) {
+                var p = componentPath(c);
+                if (p) refs.push(p);
+              });
+            }
+          });
+        }
+        var entry = { objects: objects, build: doc.getElementsByTagNameNS('*', 'build')[0] };
+        docs[path] = entry; // registered before recursing, so reference cycles terminate
+        return Promise.all(refs.map(loadDoc)).then(function () { return entry; });
+      });
+    }
+
     return JSZip.loadAsync(buffer).catch(function () {
       throw new Error('This is not a valid 3MF file.');
     }).then(function (zip) {
+      zipRef = zip;
       // Find the model part via the package relationships, else the usual path.
       var modelPath = '3D/3dmodel.model';
       var relsFile = zip.file('_rels/.rels');
@@ -110,26 +153,15 @@
             }
           }
         }
-        var modelFile = zip.file(modelPath);
-        if (!modelFile) throw new Error('No 3D model found inside this 3MF file.');
-        return modelFile.async('string');
+        if (!zip.file(modelPath)) throw new Error('No 3D model found inside this 3MF file.');
+        return loadDoc(modelPath);
       });
-    }).then(function (xmlText) {
-      var doc = new DOMParser().parseFromString(xmlText, 'application/xml');
-      if (doc.getElementsByTagName('parsererror').length) {
-        throw new Error('This 3MF file contains invalid XML.');
-      }
-      var resources = doc.getElementsByTagNameNS('*', 'resources')[0];
-      var build = doc.getElementsByTagNameNS('*', 'build')[0];
-      if (!resources || !build) throw new Error('This 3MF file has no printable model.');
+    }).then(function (main) {
+      var build = main.build;
+      if (!build) throw new Error('This 3MF file has no printable model.');
 
-      var objects = {};
-      childrenNamed(resources, 'object').forEach(function (o) {
-        objects[o.getAttribute('id')] = o;
-      });
-
-      function buildObject(id, depth) {
-        var o = objects[id];
+      function buildObject(doc, id, depth) {
+        var o = doc.objects[id];
         if (!o || depth > 16) return null;
         var group = new THREE.Group();
 
@@ -161,7 +193,9 @@
         var compsEl = childrenNamed(o, 'components')[0];
         if (compsEl) {
           childrenNamed(compsEl, 'component').forEach(function (c) {
-            var child = buildObject(c.getAttribute('objectid'), depth + 1);
+            var part = componentPath(c);
+            var target = part ? docs[part] : doc; // p:path points at another part of the package
+            var child = target ? buildObject(target, c.getAttribute('objectid'), depth + 1) : null;
             if (child) {
               child.applyMatrix4(parse3MFTransform(c.getAttribute('transform')));
               group.add(child);
@@ -174,13 +208,15 @@
       var root = new THREE.Group();
       childrenNamed(build, 'item').forEach(function (item) {
         if (item.getAttribute('printable') === '0') return;
-        var obj = buildObject(item.getAttribute('objectid'), 0);
+        var obj = buildObject(main, item.getAttribute('objectid'), 0);
         if (obj) {
           obj.applyMatrix4(parse3MFTransform(item.getAttribute('transform')));
           root.add(obj);
         }
       });
-      if (root.children.length === 0) throw new Error('This 3MF file has no printable objects.');
+      var meshCount = 0;
+      root.traverse(function (n) { if (n.isMesh) meshCount++; });
+      if (meshCount === 0) throw new Error('This 3MF file has no geometry I can read.');
       return root;
     });
   }
@@ -200,10 +236,7 @@
     var box = new THREE.Box3().setFromObject(obj);
     if (parent) parent.add(obj);
 
-    if (box.isEmpty()) {
-      setStatus('The model loaded but appears to be empty.', true);
-      return;
-    }
+    if (box.isEmpty()) return false;
 
     var size = box.getSize(new THREE.Vector3());
     var center = box.getCenter(new THREE.Vector3());
@@ -212,6 +245,7 @@
 
     obj.scale.set(s, s, s);
     obj.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+    return true;
   }
 
   // ---- Loading ----------------------------------------------------------
@@ -281,7 +315,11 @@
   });
 
   function onLoaded(name) {
-    fitModel();
+    if (!fitModel()) {
+      setStatus('"' + name + '" loaded but contains no visible geometry.', true);
+      return;
+    }
+    rootEl.object3D.rotation.set(0.6, 0, 0); // tilt toward the viewer so flat models aren't seen edge-on
     exportForAR();
     setStatus('Loaded "' + name + '". Drag to rotate, or tap View in AR.');
   }
@@ -391,7 +429,14 @@
     e.preventDefault();
     dragDepth = 0;
     dragOverlay.classList.remove('active');
-    var file = e.dataTransfer && e.dataTransfer.files[0];
+    var dt = e.dataTransfer;
+    var file = dt && dt.files && dt.files[0];
+    if (!file && dt && dt.items) {
+      // iPadOS can deliver dragged files only through items
+      for (var i = 0; i < dt.items.length; i++) {
+        if (dt.items[i].kind === 'file') { file = dt.items[i].getAsFile(); break; }
+      }
+    }
     if (file) loadFile(file);
   });
 })();
