@@ -35,9 +35,23 @@ A student drops a 3D model into a web page and gets a viewer they can open on th
 
 ## Getting started
 
-Setup instructions will be added once the first version exists.
+There is no build step. It is a static site: `index.html`, `css/style.css` and `js/main.js`.
 
-Note that phone browsers only allow camera access on a secure origin. The viewer must be served over HTTPS, or from `localhost` during development.
+Serve the folder locally:
+
+```bash
+npx serve .
+```
+
+Phone browsers only allow camera access on a secure origin. To test on a phone, host the site over HTTPS (for example GitHub Pages) or use an HTTPS tunnel. `localhost` works on the same computer only.
+
+To use it:
+
+1. Open the page and allow camera access.
+2. Drag a model onto the page, or tap the drop zone to pick a file (on a phone, choose a file from the device).
+3. Show the Hiro marker to the camera. Use "Preview without marker" to check the model without one.
+
+Known limits: `.gltf` files that reference separate `.bin` or texture files won't load from a single file, so use `.glb`. OBJ files load without their `.mtl` materials.
 
 ## Roadmap
 

@@ -1,0 +1,78 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #000;
+}
+
+#panel {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  width: min(280px, calc(100vw - 24px));
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(20, 20, 24, 0.82);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+}
+
+#dropzone:hover,
+#dropzone:focus-visible {
+  border-color: #fff;
+  outline: none;
+}
+
+#dropzone small { opacity: 0.7; }
+
+#status { font-size: 14px; word-break: break-word; }
+#status.error { color: #ff8a80; }
+
+#mode-btn {
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  background: #3d7eff;
+  color: #fff;
+  cursor: pointer;
+}
+
+#mode-btn:disabled { opacity: 0.4; cursor: default; }
+
+#hint { margin: 0; font-size: 12px; opacity: 0.8; }
+#hint a { color: #9fc0ff; }
+
+#drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #fff;
+  background: rgba(61, 126, 255, 0.55);
+  border: 4px dashed #fff;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+#drag-overlay.active { display: flex; }
