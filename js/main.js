@@ -320,6 +320,7 @@
       return;
     }
     rootEl.object3D.rotation.set(0.6, 0, 0); // tilt toward the viewer so flat models aren't seen edge-on
+    rootEl.object3D.scale.set(1, 1, 1);      // reset any zoom from the previous model
     exportForAR();
     setStatus('Loaded "' + name + '". Drag to rotate, or tap View in AR.');
   }
@@ -382,22 +383,64 @@
     }
   }
 
-  // ---- Drag to rotate the model (mouse or touch on the 3D view) ----------
+  // ---- Viewer gestures: drag = rotate, wheel / pinch = zoom ---------------
+  // This only changes the on-screen preview. The size used for AR is the cm field.
 
-  var rotating = null;
-  var canvasHost = document.body;
-  canvasHost.addEventListener('pointerdown', function (e) {
-    if (e.target.closest('#panel')) return;
-    rotating = { x: e.clientX, y: e.clientY };
+  var MIN_ZOOM = 0.2;
+  var MAX_ZOOM = 6;
+  var pointers = {};    // active pointers by id
+  var pinchStart = null; // { dist, scale } while two fingers are down
+
+  function inPanel(e) { return e.target.closest && e.target.closest('#panel'); }
+
+  function setZoom(z) {
+    z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+    rootEl.object3D.scale.set(z, z, z);
+  }
+
+  function pointerCount() { return Object.keys(pointers).length; }
+
+  function pinchDistance() {
+    var ids = Object.keys(pointers);
+    var a = pointers[ids[0]];
+    var b = pointers[ids[1]];
+    return Math.hypot(a.x - b.x, a.y - b.y) || 1;
+  }
+
+  document.body.addEventListener('pointerdown', function (e) {
+    if (inPanel(e)) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pointerCount() === 2) {
+      pinchStart = { dist: pinchDistance(), scale: rootEl.object3D.scale.x };
+    }
   });
+
   window.addEventListener('pointermove', function (e) {
-    if (!rotating) return;
+    var p = pointers[e.pointerId];
+    if (!p) return;
+    if (pointerCount() >= 2 && pinchStart) {
+      p.x = e.clientX; p.y = e.clientY;
+      setZoom(pinchStart.scale * pinchDistance() / pinchStart.dist);
+      return;
+    }
     var r = rootEl.object3D.rotation;
-    r.y += (e.clientX - rotating.x) * 0.01;
-    r.x = Math.max(-1.5, Math.min(1.5, r.x + (e.clientY - rotating.y) * 0.01));
-    rotating = { x: e.clientX, y: e.clientY };
+    r.y += (e.clientX - p.x) * 0.01;
+    r.x = Math.max(-1.5, Math.min(1.5, r.x + (e.clientY - p.y) * 0.01));
+    p.x = e.clientX; p.y = e.clientY;
   });
-  window.addEventListener('pointerup', function () { rotating = null; });
+
+  function endPointer(e) {
+    delete pointers[e.pointerId];
+    if (pointerCount() < 2) pinchStart = null;
+  }
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
+
+  window.addEventListener('wheel', function (e) {
+    if (inPanel(e)) return;
+    e.preventDefault();
+    setZoom(rootEl.object3D.scale.x * Math.exp(-e.deltaY * 0.001));
+  }, { passive: false });
 
   // ---- Drag and drop / file picker --------------------------------------
 

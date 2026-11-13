@@ -2,6 +2,7 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  touch-action: none; /* let the page handle drag and pinch itself, not the browser */
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   background: #2a2d34;
 }

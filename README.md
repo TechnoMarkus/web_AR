@@ -27,7 +27,7 @@ Marker-based AR is out of scope. It is a separate application.
 ## How it works
 
 1. The student opens the page and drops a model file onto it (or taps to choose one).
-2. The model appears in the 3D viewer. Drag to rotate.
+2. The model appears in the 3D viewer. Drag to rotate, and scroll (mouse) or pinch (touch) to zoom. Zoom only changes the preview; the AR size comes from the size field.
 3. The student sets the real-world size (default 20 cm, longest side).
 4. They tap "View in AR". The model is exported to GLB in the browser and handed to the phone's AR viewer, where it is placed on the floor or a table.
 
