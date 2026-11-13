@@ -1,16 +1,19 @@
 # AR-tool
 
-A browser-based, marker-based augmented reality viewer for classroom use. It is a lightweight replacement for Adobe Aero in teaching demonstrations.
+A browser-based, markerless augmented reality viewer for classroom use. It is a lightweight replacement for Adobe Aero in teaching demonstrations.
 
-A student drops a 3D model into a web page and gets a viewer they can open on their phone. Point the phone camera at a marker and the model appears anchored to it.
+A student drops a 3D model into a web page, checks it in a 3D viewer, then opens it in AR on their phone to place it on a floor or table. No marker and no app install.
 
-> **Status:** early development. The features below describe the intended behaviour. Nothing here is a finished feature unless stated.
+> **Status:** early development. Not yet tested on a real phone.
 
 ## Goals
 
 - Drag and drop a 3D model into a web interface.
-- Generate a viewer that works on a phone browser, with no app install.
+- A built-in 3D viewer to inspect the model (drag to rotate).
+- Markerless AR on a phone: place the model on a real surface at a chosen real-world size.
 - Run entirely in the browser, so it is easy to host and demo in a class.
+
+Marker-based AR is out of scope. It is a separate application.
 
 ## Supported model formats
 
@@ -23,15 +26,16 @@ A student drops a 3D model into a web page and gets a viewer they can open on th
 
 ## How it works
 
-1. The student opens the web interface and drags a model file onto it.
-2. The tool loads the model and previews it.
-3. The student opens the generated viewer on their phone.
-4. The phone camera detects the marker and displays the model anchored to it.
+1. The student opens the page and drops a model file onto it (or taps to choose one).
+2. The model appears in the 3D viewer. Drag to rotate.
+3. The student sets the real-world size (default 20 cm, longest side).
+4. They tap "View in AR". The model is exported to GLB in the browser and handed to the phone's AR viewer, where it is placed on the floor or a table.
 
 ## Tech stack
 
-- [A-Frame](https://aframe.io/) for the 3D scene
-- [AR.js](https://ar-js-org.github.io/AR.js-Docs/) for marker-based tracking
+- [A-Frame](https://aframe.io/) for the 3D viewer
+- [`<model-viewer>`](https://modelviewer.dev/) for surface AR (WebXR and Scene Viewer on Android, Quick Look on iPhone). The loaded model is exported to GLB in the browser with three.js `GLTFExporter`.
+- [JSZip](https://stuk.github.io/jszip/) to read 3MF files
 - Plain HTML and JavaScript, hosted as a static site
 
 ## Getting started
@@ -44,24 +48,21 @@ Serve the folder locally:
 npx serve .
 ```
 
-Phone browsers only allow camera access on a secure origin. To test on a phone, host the site over HTTPS (for example GitHub Pages) or use an HTTPS tunnel. `localhost` works on the same computer only.
+AR needs a secure origin. To test on a phone, host the site over HTTPS (for example GitHub Pages) or use an HTTPS tunnel. A plain `http://` address, a `file://` page or a network address like `http://192.168.x.x` will not work for AR on a phone.
 
-To use it:
-
-1. Open the page and allow camera access.
-2. Drag a model onto the page, or tap the drop zone to pick a file (on a phone, choose a file from the device).
-3. Show the Hiro marker to the camera. Use "Preview without marker" to check the model without one.
+AR depends on the device: it needs Chrome on a recent Android phone with Google Play Services for AR, or Safari on an iPhone. It does not work on desktop browsers. If the device can't do it, the page says so.
 
 Known limits: `.gltf` files that reference separate `.bin` or texture files won't load from a single file, so use `.glb`. OBJ files load without their `.mtl` materials. STL and 3MF models are shown in plain grey: 3MF colours and materials are ignored, and 3MF files that split their model across several files (production extension) are not supported.
 
 ## Roadmap
 
-- [ ] Drag-and-drop model loading
-- [ ] STL, glTF/GLB and OBJ support
-- [ ] Marker-based AR viewer for phones
-- [ ] Model scale, rotation and position controls
+- [x] Drag-and-drop model loading
+- [x] STL, 3MF, glTF/GLB and OBJ support
+- [x] Drag-to-rotate 3D viewer
+- [x] Real-world size control
+- [ ] Markerless AR tested on Android and iPhone
+- [ ] Colour and material support
 - [ ] Shareable viewer link or QR code
-- [ ] Printable marker
 
 ## License
 

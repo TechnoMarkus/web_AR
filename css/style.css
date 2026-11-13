@@ -3,7 +3,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: #000;
+  background: #2a2d34;
 }
 
 #panel {
@@ -55,10 +55,41 @@ html, body {
   cursor: pointer;
 }
 
-#mode-btn:disabled { opacity: 0.4; cursor: default; }
+#ar-btn {
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  background: #1f9d6b;
+  color: #fff;
+  cursor: pointer;
+}
+
+#mode-btn:disabled,
+#ar-btn:disabled { opacity: 0.4; cursor: default; }
+
+#size-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+#size-cm {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font: inherit;
+}
+
+/* Present in the DOM so it can start AR, but not shown */
+#mv {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
 
 #hint { margin: 0; font-size: 12px; opacity: 0.8; }
-#hint a { color: #9fc0ff; }
 
 #drag-overlay {
   position: fixed;

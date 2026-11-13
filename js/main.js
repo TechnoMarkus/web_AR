@@ -4,31 +4,15 @@
   var THREE = AFRAME.THREE;
   var SUPPORTED = ['stl', '3mf', 'glb', 'gltf', 'obj'];
 
-  var sceneEl = document.querySelector('a-scene');
-  var markerEl = document.getElementById('marker');
-  var cameraEl = document.getElementById('camera');
   var rootEl = document.getElementById('root');
   var modelEl = document.getElementById('model');
 
   var dropzone = document.getElementById('dropzone');
   var fileInput = document.getElementById('file-input');
   var statusEl = document.getElementById('status');
-  var modeBtn = document.getElementById('mode-btn');
   var dragOverlay = document.getElementById('drag-overlay');
 
   var currentUrl = null;
-  var previewMode = false;
-
-  // Start AR.js only if the browser exposes the camera API (needs HTTPS or localhost).
-  var cameraAvailable = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  if (cameraAvailable) {
-    sceneEl.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;');
-  } else {
-    document.getElementById('hint').textContent =
-      'Camera unavailable: this page needs HTTPS (or localhost) for AR. Showing a plain 3D preview instead.';
-    document.body.style.background = '#2a2d34';
-    sceneEl.addEventListener('loaded', function () { setPreview(true); modeBtn.hidden = true; });
-  }
 
   function setStatus(text, isError) {
     statusEl.textContent = text;
@@ -201,13 +185,13 @@
     });
   }
 
-  // ---- Fit the model to the marker --------------------------------------
+  // ---- Fit the model to a 1-unit cube ------------------------------------
 
   function fitModel() {
     var obj = modelEl.object3D;
     var parent = obj.parent;
 
-    // Measure in isolation so the marker's pose doesn't skew the bounding box.
+    // Measure in isolation so the parent's pose doesn't skew the bounding box.
     if (parent) parent.remove(obj);
     obj.position.set(0, 0, 0);
     obj.scale.set(1, 1, 1);
@@ -224,7 +208,7 @@
     var size = box.getSize(new THREE.Vector3());
     var center = box.getCenter(new THREE.Vector3());
     var maxDim = Math.max(size.x, size.y, size.z) || 1;
-    var s = 1 / maxDim; // marker is 1 unit wide
+    var s = 1 / maxDim; // longest side becomes 1 unit
 
     obj.scale.set(s, s, s);
     obj.position.set(-center.x * s, -box.min.y * s, -center.z * s);
@@ -242,10 +226,64 @@
     }
   }
 
+  // ---- Markerless AR (surface placement) via <model-viewer> -------------
+
+  var mv = document.getElementById('mv');
+  var arBtn = document.getElementById('ar-btn');
+  var sizeInput = document.getElementById('size-cm');
+  var glbUrl = null;
+  var exportTimer = null;
+  var exportToken = 0;
+
+  // Export the fitted model as a GLB at real-world size (metres) for model-viewer.
+  function exportForAR() {
+    if (!modelEl.getObject3D('mesh') || typeof THREE.GLTFExporter === 'undefined') {
+      arBtn.disabled = true;
+      return Promise.resolve();
+    }
+    var token = ++exportToken;
+    var cm = Math.max(1, Math.min(500, parseFloat(sizeInput.value) || 20));
+    var wrapper = new THREE.Group();
+    wrapper.add(modelEl.object3D.clone()); // clone keeps the auto-fit scale/offset, shares geometry
+    wrapper.scale.setScalar(cm / 100);     // fitted model is 1 unit; AR uses metres
+    wrapper.updateMatrixWorld(true);
+
+    return new Promise(function (resolve, reject) {
+      new THREE.GLTFExporter().parse(wrapper, resolve, reject, { binary: true });
+    }).then(function (glb) {
+      if (token !== exportToken) return; // a newer export superseded this one
+      var url = URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' }));
+      if (glbUrl) URL.revokeObjectURL(glbUrl);
+      glbUrl = url;
+      mv.src = url;
+      arBtn.disabled = false;
+    }).catch(function () {
+      arBtn.disabled = true;
+      setStatus('Could not prepare the model for surface AR.', true);
+    });
+  }
+
+  sizeInput.addEventListener('input', function () {
+    clearTimeout(exportTimer);
+    exportTimer = setTimeout(exportForAR, 400);
+  });
+
+  arBtn.addEventListener('click', function () {
+    if (!window.isSecureContext) {
+      setStatus('AR needs HTTPS. Open the hosted (https://) version of this page on your phone.', true);
+      return;
+    }
+    if (!mv.canActivateAR) {
+      setStatus('Surface AR isn’t available on this device or browser. Try Chrome on a recent Android phone or Safari on an iPhone.', true);
+      return;
+    }
+    mv.activateAR();
+  });
+
   function onLoaded(name) {
     fitModel();
-    modeBtn.disabled = false;
-    setStatus(previewMode ? 'Showing "' + name + '" (preview).' : 'Loaded "' + name + '". Point the camera at the marker.');
+    exportForAR();
+    setStatus('Loaded "' + name + '". Drag to rotate, or tap View in AR.');
   }
 
   function loadFile(file) {
@@ -305,24 +343,6 @@
       modelEl.setAttribute('gltf-model', currentUrl);
     }
   }
-
-  // ---- Preview (no marker) toggle ---------------------------------------
-
-  function setPreview(on) {
-    previewMode = on;
-    if (on) {
-      cameraEl.object3D.add(rootEl.object3D);
-      rootEl.object3D.position.set(0, -0.4, -1.8);
-      rootEl.object3D.visible = true;
-      modeBtn.textContent = 'Back to marker mode';
-    } else {
-      markerEl.object3D.add(rootEl.object3D);
-      rootEl.object3D.position.set(0, 0, 0);
-      modeBtn.textContent = 'Preview without marker';
-    }
-  }
-
-  modeBtn.addEventListener('click', function () { setPreview(!previewMode); });
 
   // ---- Drag to rotate the model (mouse or touch on the 3D view) ----------
 

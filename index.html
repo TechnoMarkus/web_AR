@@ -6,23 +6,23 @@
   <title>AR Viewer</title>
   <link rel="stylesheet" href="css/style.css">
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <!-- three r147 matches A-Frame 1.4.2; used to export the model as GLB for surface AR -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/exporters/GLTFExporter.js"></script>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 </head>
 <body>
-  <a-scene embedded
-           vr-mode-ui="enabled: false"
+  <a-scene vr-mode-ui="enabled: false"
+           device-orientation-permission-ui="enabled: false"
            renderer="logarithmicDepthBuffer: true; colorManagement: true">
 
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.9" position="1 3 2"></a-entity>
 
-    <a-marker id="marker" preset="hiro">
-      <!-- #root is the thing the student sees; #model is auto-centred and scaled to fit the marker -->
-      <a-entity id="root">
-        <a-entity id="model"></a-entity>
-      </a-entity>
-    </a-marker>
+    <!-- #root is what the student sees; #model is auto-centred and scaled to 1 unit -->
+    <a-entity id="root" position="0 -0.4 -1.8">
+      <a-entity id="model"></a-entity>
+    </a-entity>
 
     <a-entity id="camera" camera></a-entity>
   </a-scene>
@@ -35,12 +35,16 @@
       <input id="file-input" type="file" accept=".stl,.3mf,.glb,.gltf,.obj" hidden>
     </div>
     <div id="status" role="status" aria-live="polite">No model loaded.</div>
-    <button id="mode-btn" type="button" disabled>Preview without marker</button>
-    <p id="hint">
-      Point the camera at the
-      <a href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png" target="_blank" rel="noopener">Hiro marker</a>.
-    </p>
+    <button id="ar-btn" type="button" disabled>View in AR</button>
+    <label id="size-label">Real-world size (cm, longest side)
+      <input id="size-cm" type="number" min="1" max="500" step="1" value="20">
+    </label>
+    <p id="hint">Drag to rotate. "View in AR" places the model on a floor or table through your phone camera.</p>
   </div>
+
+  <!-- Hidden helper: model-viewer launches WebXR / Scene Viewer (Android) or Quick Look (iPhone) -->
+  <model-viewer id="mv" ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="fixed"
+                loading="eager" reveal="auto" alt="Your 3D model"></model-viewer>
 
   <div id="drag-overlay">Drop to load model</div>
 
